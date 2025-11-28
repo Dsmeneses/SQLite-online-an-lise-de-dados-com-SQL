@@ -1,0 +1,91 @@
+/*Qual é o número de Clientes que existem na base de dados ?*/
+SELECT count(*) from clientes;
+
+/*Quantos produtos foram vendidos no ano de 2022 ?*/
+SELECT count(iv.produto_id) as Produtos_vendidos_2022 from vendas v
+JOIN itens_venda iv on v.id_venda = iv.venda_id
+where STRFTIME('%Y', v.data_venda) = '2022';
+
+/*Qual a categoria que mais vendeu em 2022 ?*/
+SELECT COUNT(*) As Total_vendas_prod_2022, c.nome_categoria as Nome_categoria from vendas v
+join itens_venda iv on v.id_venda = iv.venda_id
+join produtos p on iv.produto_id = p.id_produto
+JOIN categorias c on p.categoria_id = c.id_categoria
+where STRFTIME('%Y', v.data_venda) = '2022'
+GROUP by Nome_categoria
+order by COUNT(*) DESC LIMIT 1;
+
+/*Qual o primeiro ano disponível na base ?*/
+SELECT MIN(STRFTIME('%Y', data_venda)) as Ano from vendas;
+
+/*Qual o nome do fornecedor que mais vendeu no primeiro ano disponível na base ?*/
+SELECT count(*) as Vendas_fornecedor, f.nome from vendas v
+join itens_venda iv on v.id_venda = iv.venda_id
+join produtos p on iv.produto_id = p.id_produto
+join fornecedores f on p.fornecedor_id = f.id_fornecedor
+where STRFTIME('%Y', v.data_venda) = '2020'
+group by f.nome
+ORDER by count(*) DESC LIMIT 1;
+
+/*Quanto ele vendeu no primeiro ano disponível na base de dados ?*/
+SELECT f.nome, count(*) as Qtd_vendas_fornecedor, STRFTIME('%Y', data_venda) as Ano from itens_venda iv
+join vendas v on v.id_venda = iv.venda_id
+join produtos p on iv.produto_id = p.id_produto
+join fornecedores f on p.fornecedor_id = f.id_fornecedor
+where Ano = '2020'
+GROUP by f.nome
+order by COUNT(*) DESC LIMIT 1;
+
+/*Quais as duas categorias que mais venderam no total de todos os anos ?*/
+SELECT COUNT(*) As Total_vendas_prod, c.nome_categoria as Nome_categoria from vendas v
+join itens_venda iv on v.id_venda = iv.venda_id
+join produtos p on iv.produto_id = p.id_produto
+JOIN categorias c on p.categoria_id = c.id_categoria
+GROUP by Nome_categoria
+order by COUNT(*) DESC LIMIT 2;
+
+/*Crie uma tabela comparando as vendas ao longo do tempo das duas categorias que mais venderam no total de todos os anos.*/
+SELECT Ano_Mes, SUM(CASE When Nome_categoria == 'Eletrônicos' THEN Qtd_vendas else 0 END) as Vendas_Eletronicos,
+				SUM(CASE When Nome_categoria == 'Vestuário' THEN Qtd_vendas else 0 END) as Vendas_Vestuario
+from(SELECT COUNT(*) as Qtd_vendas, STRFTIME('%Y/%m', v.data_venda) as Ano_Mes, c.nome_categoria as Nome_categoria
+    from vendas v
+    Join itens_venda iv on v.id_venda = iv.venda_id
+    join produtos p on iv.produto_id = p.id_produto
+    join categorias c on p.categoria_id = c.id_categoria
+    where Nome_categoria in ('Eletrônicos', 'Vestuário')
+    GROUP by Ano_Mes, Nome_categoria
+    Order by Ano_Mes, Nome_categoria)
+GROUP by Ano_Mes;
+
+
+/*Calcule a porcentagem de vendas por categorias no ano de 2022.*/
+SELECT Nome_Categoria, Qtd_vendas, ROUND(100.0*Qtd_vendas/(SELECT count(*) from itens_venda), 2) || '%' as Porcentagem_Vendas
+from(
+  SELECT c.nome_categoria as Nome_categoria, COUNT(*) as Qtd_vendas, STRFTIME('%Y', v.data_venda) as Ano From itens_venda it
+  join vendas v on v.id_venda = it.venda_id
+  JOIN produtos p on p.id_produto = it.produto_id
+  join categorias c on c.id_categoria = p.categoria_id
+  where Ano = '2022'
+  GROUP by c.nome_categoria
+  ORDER by Qtd_vendas DESC
+);
+
+/*Crie uma métrica mostrando a porcentagem de vendas a mais que a melhor categoria tem em relação a pior no ano de 2022.*/
+
+With Total_Vendas As(SELECT COUNT(*) as Total_vendas_2022
+                    from itens_venda iv
+                    join vendas v on iv.venda_id = v.id_venda
+                    where STRFTIME('%Y', v.data_venda) = '2022'),
+Vendas_por_Categorias as (SELECT c.nome_categoria as Nome_categoria, COUNT(iv.produto_id) as Qtd_vendas From itens_venda iv
+                      join vendas v on v.id_venda = iv.venda_id
+                      JOIN produtos p on p.id_produto = iv.produto_id
+                      join categorias c on c.id_categoria = p.categoria_id
+                      where STRFTIME('%Y', v.data_venda) = '2022'
+                      GROUP by c.nome_categoria),
+Melhor_Pior_Categoria as(SELECT MIN(Qtd_vendas) as Pior_vendas, Max(Qtd_vendas) as Melhor_vendas
+                        from Vendas_por_Categorias)
+SELECT Nome_categoria, Qtd_vendas, ROUND(100.0 * Qtd_vendas/tv.Total_vendas_2022, 2) || '%' as Porcentagem,
+								   ROUND(100.0 * (Qtd_vendas - Melhor_vendas)/ Melhor_vendas, 2) || '%' as Porcentagem_Melhor_Vendas
+                                   from Vendas_por_Categorias
+                                   cross Join Total_Vendas tv
+                                   cross JOIN Melhor_Pior_Categoria;
